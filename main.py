@@ -41,6 +41,9 @@ PRIOR_B_E = 0.85
 AUTO_RATE = 90.0
 # Floor on the logit spread: never claim to know the rate better than this.
 SIGMA_FLOOR = 0.30
+# Extrapolation model-risk widening (logistic vs power law fork).
+WIDEN_PER_SQRT_DAY = 0.45
+WIDEN_CAP = 0.60
 # Extra spread that grows with the horizon (logit units per sqrt day).
 SIGMA_WALK = 0.30
 
@@ -109,14 +112,19 @@ def forecast_case(case: dict, name: str) -> dict:
         h_last = epochs[-1][0]
         gap = max(0.0, target_hours - h_last)
         sigma_p = sd_p * math.sqrt(1 + gap / max(h_last, 1.0))
+        # Model risk of the long extrapolation: a saturating pool (logistic) bends
+        # below a straight power law by 2-4x in P over a multi-day gap. Widen with
+        # the gap so the band covers both, capped.
+        sigma_p += min(WIDEN_PER_SQRT_DAY * math.sqrt(gap / 24.0), WIDEN_CAP)
+        log_p_target = a + b * math.log(1 + target_hours)
+        p_target = max(math.exp(log_p_target), epochs[-1][1])
     else:
         h_last, p_last = epochs[-1]
         b = PRIOR_B_P
         a = math.log(p_last) - b * math.log(1 + h_last)
         sigma_p = 0.5
-
-    log_p_target = a + b * math.log(1 + target_hours)
-    p_target = max(math.exp(log_p_target), epochs[-1][1])
+        log_p_target = a + b * math.log(1 + target_hours)
+        p_target = max(math.exp(log_p_target), epochs[-1][1])
 
     # --- per-trophy earned counts ---
     rows = []
