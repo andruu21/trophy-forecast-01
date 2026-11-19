@@ -44,6 +44,8 @@ SIGMA_FLOOR = 0.30
 # Extrapolation model-risk widening (logistic vs power law fork).
 WIDEN_PER_SQRT_DAY = 0.45
 WIDEN_CAP = 0.60
+# Empirical-Bayes shrinkage weight of a trophy's slope toward the median slope.
+SHRINK = 3.0
 # Extra spread that grows with the horizon (logit units per sqrt day).
 SIGMA_WALK = 0.30
 
@@ -84,6 +86,29 @@ def fit_loglog(xs, ys):
     resid = [y - (a + b * x) for x, y in zip(lx, ly)]
     sd = math.sqrt(sum(r * r for r in resid) / max(n - 2, 1))
     return a, b, sd, n
+
+
+def earned_obs(hist, i):
+    """(h, earned) pairs at each distinct-rate epoch of trophy i, oldest first."""
+    obs = []
+    last_rate = None
+    for read in hist:
+        r = read["rates"][i] if i < len(read["rates"]) else None
+        if r is None:
+            continue
+        if last_rate is None or r != last_rate:
+            p = read["players_tracked"] or 0
+            obs.append((hours_since(read["at"]), r * p / 100.0))
+            last_rate = r
+    return obs
+
+
+def last_rate_of(hist, i):
+    """Trophy i's rate in the last read that lists it."""
+    for read in reversed(hist):
+        if i < len(read["rates"]) and read["rates"][i] is not None:
+            return read["rates"][i]
+    return None
 
 
 def forecast_case(case: dict, name: str) -> dict:
@@ -127,20 +152,24 @@ def forecast_case(case: dict, name: str) -> dict:
         p_target = max(math.exp(log_p_target), epochs[-1][1])
 
     # --- per-trophy earned counts ---
+    # First pass: fit every trophy's log-log slope; shrink noisy slopes toward the
+    # all-trophy median (empirical Bayes: a slope fit from few epochs or a small
+    # earned count carries little information on its own).
+    slopes = {}
+    for i in range(len(case["trophies"])):
+        obs = earned_obs(hist, i)
+        if len(obs) >= 3 and obs[-1][1] >= 1.0:
+            ae, be, sd_e, _ = fit_loglog([h for h, _ in obs], [e for _, e in obs])
+            w = min(len(obs), 6) * math.log(1 + max(obs[-1][1], 1.0))
+            slopes[i] = (min(max(be, 0.2), 2.0), w)
+    med_b = sorted(v[0] for v in slopes.values())[len(slopes) // 2] if slopes else PRIOR_B_E
+
     rows = []
     for i, trophy in enumerate(case["trophies"]):
-        obs = []  # (h, earned) at each distinct-rate epoch
-        last_rate = None
-        for read in hist:
-            r = read["rates"][i] if i < len(read["rates"]) else None
-            if r is None:
-                continue
-            if last_rate is None or r != last_rate:
-                p = read["players_tracked"] or 0
-                obs.append((hours_since(read["at"]), r * p / 100.0))
-                last_rate = r
+        obs = earned_obs(hist, i)
 
-        near_auto = last_rate is not None and last_rate >= AUTO_RATE
+        near_auto = bool(obs) and last_rate_of(hist, i) is not None \
+            and last_rate_of(hist, i) >= AUTO_RATE
 
         if near_auto:
             # Nearly everyone who syncs earns it: its earned count tracks P(t).
@@ -149,15 +178,18 @@ def forecast_case(case: dict, name: str) -> dict:
             sigma_e = 0.15
         elif len(obs) >= 3 and obs[-1][1] >= 1.0:
             ae, be, sd_e, _ = fit_loglog([h for h, _ in obs], [e for _, e in obs])
+            # empirical-Bayes shrinkage of the slope toward the all-trophy median
+            be_raw, w = slopes.get(i, (min(max(be, 0.2), 2.0), 0.0))
+            be = (w * be_raw + SHRINK * med_b) / (w + SHRINK)
             be = min(max(be, 0.2), 2.0)
             e_target = math.exp(ae + be * math.log(1 + target_hours))
             h_last_e = obs[-1][0]
             gap = max(0.0, target_hours - h_last_e)
             sigma_e = sd_e * math.sqrt(1 + gap / max(h_last_e, 1.0))
         elif obs and obs[-1][1] > 0:
-            # little signal: grow earned like the prior slope, anchored at last value
+            # little signal: grow earned like the median slope, anchored at last value
             h_last_e = obs[-1][0]
-            e_target = obs[-1][1] * ((1 + target_hours) / (1 + h_last_e)) ** PRIOR_B_E
+            e_target = obs[-1][1] * ((1 + target_hours) / (1 + h_last_e)) ** med_b
             sigma_e = 0.8
         else:
             e_target = 0.0
