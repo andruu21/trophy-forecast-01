@@ -132,13 +132,12 @@ def forecast_case(case: dict, name: str) -> dict:
                 obs.append((hours_since(read["at"]), r * p / 100.0))
                 last_rate = r
 
-        near_auto = obs and obs[-1][1] > 0 and obs[-1][1] / max(
-            (hist[-1]["players_tracked"] or 1), 1
-        ) * 100 >= AUTO_RATE
+        near_auto = last_rate is not None and last_rate >= AUTO_RATE
 
         if near_auto:
-            # Nearly everyone who syncs earns it: it tracks the denominator.
-            e_target = (obs[-1][1] / max(hist[-1]["players_tracked"] or 1, 1)) * p_target
+            # Nearly everyone who syncs earns it: its earned count tracks P(t).
+            p_at_epoch = math.exp(a + b * math.log(1 + obs[-1][0]))
+            e_target = (obs[-1][1] / max(p_at_epoch, 1.0)) * p_target
             sigma_e = 0.15
         elif len(obs) >= 3 and obs[-1][1] >= 1.0:
             ae, be, sd_e, _ = fit_loglog([h for h, _ in obs], [e for _, e in obs])
