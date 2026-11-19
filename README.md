@@ -1,5 +1,9 @@
 # trophy-forecast-01
 
+![Competition](https://make.fun/badge/gta6-trophy-rarity-forecast-01.svg)
+![Rank](https://make.fun/badge/gta6-trophy-rarity-forecast-01/andruu21/trophy-forecast-01/rank.svg)
+![Reward](https://make.fun/badge/gta6-trophy-rarity-forecast-01/andruu21/trophy-forecast-01/reward.svg)
+
 Forecasts, for every Grand Theft Auto VI PlayStation 5 trophy, its earn rate on
 [Exophase](https://www.exophase.com/game/grand-theft-auto-vi-psn/trophies/) at
 2026-11-26T00:00Z as five quantiles, from the earn rates the house recorded
