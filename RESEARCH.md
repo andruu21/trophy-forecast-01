@@ -32,3 +32,9 @@ Implications for the model:
 4. Exophase refreshes counts in bursts every few hours; between refreshes the page is flat. The final history (10-min cadence through deadline) will show ~several refresh epochs, enough to fit per-trophy earned growth.
 5. Rates print to 2 decimals, so at 14k players one earner moves the rate by ~0.007pp; quantization noise is modest.
 6. Comparable-game context (public, named): GTA V (PSNProfiles) platinum 0.1% PSN / 2.06% PSNProfiles tracked; RDR2 platinum ~0.1% PSN / 2.58% PSNProfiles. Story-completion rates a week in are single-digit percent of the trophy-tracked population.
+
+## Stress-test round (2026-11-20 02:40Z)
+- 5 synthetic final-horizon worlds (6.51d), noisy seeds: ours mean 0.299 vs house baseline 0.426; ours wins every world (worst: decline-spike 0.43 vs 0.64).
+- Against the real 21:20Z live snapshot (pseudo-truth, 18.3h horizon): ours 1.548 vs baseline 2.311.
+- Insight: practice leaderboard top (~0.002 loss) = entries that read the live page on launch night (legal, public page). The PAID final is scored on the 26 Nov 00:00Z answer, which nobody has before the target passes — practice rank is weakly informative.
+- Strategy: keep the model (no live-data dependency possible — grader sandbox has no network); spread floors validated.
